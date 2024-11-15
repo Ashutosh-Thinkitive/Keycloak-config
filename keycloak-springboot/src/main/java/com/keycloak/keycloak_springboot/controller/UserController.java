@@ -1,5 +1,6 @@
 package com.keycloak.keycloak_springboot.controller;
 
+import com.keycloak.keycloak_springboot.model.LoginRequest;
 import com.keycloak.keycloak_springboot.model.User;
 import com.keycloak.keycloak_springboot.model.UserDto;
 import com.keycloak.keycloak_springboot.service.UserService;
@@ -53,6 +54,10 @@ public class UserController {
     @PutMapping("/admin/{userId}")
     public ResponseEntity<String> updateUser(@PathVariable String userId, @RequestBody UserDto userDto) {
         return userService.updateUser(userId, userDto);
+    }
+    @PostMapping
+    public  ResponseEntity<?> login(@RequestBody LoginRequest loginRequest){
+        return userService.login(loginRequest);
     }
 
 }

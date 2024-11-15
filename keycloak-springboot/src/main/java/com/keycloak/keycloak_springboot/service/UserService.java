@@ -1,5 +1,6 @@
 package com.keycloak.keycloak_springboot.service;
 
+import com.keycloak.keycloak_springboot.model.LoginRequest;
 import com.keycloak.keycloak_springboot.model.User;
 import com.keycloak.keycloak_springboot.model.UserDto;
 import com.keycloak.keycloak_springboot.repository.UserRepository;
@@ -7,6 +8,15 @@ import com.keycloak.keycloak_springboot.util.KeycloakSecurityUtil;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.util.EntityUtils;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.common.util.CollectionUtil;
@@ -36,11 +46,58 @@ public class UserService {
     @Value("${realm}")
     private String realm;
 
+    @Value("${server-url}")
+    private String authServerUrl;
+
+
+    @Value("${client}")
+    private String clientId;
+
+
+    @Value("${client-secret}")
+    private String clientSecret;
 
     public List<UserDto> getUsers() {
         Keycloak keycloak = keycloakSecurityUtil.getKeycloakInstance();
         List<UserRepresentation> userRepresentations = keycloak.realm(realm).users().list();
         return mapUsers(userRepresentations);
+
+    }
+
+    public ResponseEntity<?> login(LoginRequest loginRequest) {
+
+        try {
+            String tokenUrl = String.format("%s/realms/%s/protocol/openid-connect/token", authServerUrl, realm);
+
+            HttpPost httpPost = new HttpPost(tokenUrl);
+
+            List<NameValuePair> params = new ArrayList<>();
+            params.add(new BasicNameValuePair("grant_type", "password"));
+            params.add(new BasicNameValuePair("client_id", clientId));
+            params.add(new BasicNameValuePair("client_secret", clientSecret));
+            params.add(new BasicNameValuePair("username", loginRequest.getUsername()));
+            params.add(new BasicNameValuePair("password", loginRequest.getPassword()));
+
+            httpPost.setEntity(new UrlEncodedFormEntity(params));
+            httpPost.setHeader("Content-Type", "application/x-www-form-urlencoded");
+
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                CloseableHttpResponse response = httpClient.execute(httpPost);
+                if (response.getStatusLine().getStatusCode() == 200) {
+                    String responseString = EntityUtils.toString(response.getEntity());
+                    return new ResponseEntity<>(responseString, HttpStatus.OK);
+                } else {
+                    return ResponseEntity.status(response.getStatusLine().getStatusCode())
+                            .body("Login failed: " + response.getStatusLine().getReasonPhrase());
+
+                }
+            }
+
+
+        } catch (Exception e) {
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+
+        }
 
     }
 
