@@ -4,8 +4,11 @@ import com.keycloak.keycloak_springboot.model.User;
 import com.keycloak.keycloak_springboot.model.UserDto;
 import com.keycloak.keycloak_springboot.repository.UserRepository;
 import com.keycloak.keycloak_springboot.util.KeycloakSecurityUtil;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import org.keycloak.admin.client.Keycloak;
+import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.common.util.CollectionUtil;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
@@ -50,6 +53,13 @@ public class UserService {
             return new ResponseEntity<>(userDto, HttpStatus.BAD_REQUEST);
         }
 
+        // Check email already exists
+        List<UserRepresentation> existingUsers = keycloak.realm(realm).users().search(null, null, null, userDto.getEmail(), 0, 1);
+        if (!existingUsers.isEmpty()) {
+            System.out.println("User with email " + userDto.getEmail() + " already exists.");
+            return new ResponseEntity<>(userDto, HttpStatus.CONFLICT);
+        }
+
         UserRepresentation userRep = mapUserRep(userDto);
         Response response = keycloak.realm(realm).users().create(userRep);
 
@@ -66,6 +76,49 @@ public class UserService {
         }
         return new ResponseEntity<>(userDto, HttpStatus.BAD_REQUEST);
     }
+
+
+    public ResponseEntity<String> updateUser(String userId, UserDto userDto) {
+        try {
+            Keycloak keycloak = keycloakSecurityUtil.getKeycloakInstance();
+            UserResource userResource = keycloak.realm(realm).users().get(userId);
+
+            UserRepresentation userRep = userResource.toRepresentation();
+
+            userRep.setFirstName(userDto.getFirstName());
+            userRep.setLastName(userDto.getLastName());
+            userRep.setEmail(userDto.getEmail());
+            userRep.setEnabled(true);
+            userRep.setEmailVerified(true);
+
+
+            // Update in Keycloak
+            userResource.update(userRep);
+
+            Optional<User> existingUserOptional = userRepository.findByUserId(userId);
+            if (existingUserOptional.isPresent()) {
+                User existingUser = existingUserOptional.get();
+                existingUser.setFirstName(userDto.getFirstName());
+                existingUser.setLastName(userDto.getLastName());
+                existingUser.setEmail(userDto.getEmail());
+                userRepository.save(existingUser);
+            } else {
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            }
+            userDto.setId(userId);
+            return new ResponseEntity<>("User updated successfully", HttpStatus.OK);
+
+        } catch (BadRequestException e) {
+            System.out.println("Bad Request: " + e.getMessage());
+            return new ResponseEntity<>("Bad Request: Invalid data", HttpStatus.BAD_REQUEST);
+        } catch (NotFoundException e) {
+            return new ResponseEntity<>("User not found in Keycloak", HttpStatus.NOT_FOUND);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
 
     public ResponseEntity<String> deleteUser(String userId) {
         Optional<User> user = userRepository.findByUserId(userId);
@@ -136,9 +189,6 @@ public class UserService {
         userRep.setLastName(user.getLastName());
         userRep.setEmail(user.getEmail());
         userRep.setUsername(user.getUserName());
-        System.out.println("user username" + user.getUserName());
-        System.out.println("=============");
-        System.out.println("userRep username" + userRep.getUsername());
         userRep.setEnabled(true);
         userRep.setEmailVerified(true);
         List<CredentialRepresentation> credentials = new ArrayList<>();
