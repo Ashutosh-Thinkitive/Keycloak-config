@@ -1,0 +1,9 @@
+{
+  "realm" : "test",
+  "auth-server-url" : "http://localhost:8080",
+  "resource" : "springboot-client",
+  "credentials" : {
+    "secret" : "SYO7KTYtBGbPMAehOmxx9k0tO2yXY3eB"
+  },
+  "http-method-as-scope": true
+}
